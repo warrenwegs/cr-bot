@@ -1,0 +1,23 @@
+{
+  "name": "cr-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "cr-bot.js",
+  "dependencies": {
+    "botkit": "^0.2.2"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/warrenwegs/cr-bot.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/warrenwegs/cr-bot/issues"
+  },
+  "homepage": "https://github.com/warrenwegs/cr-bot#readme"
+}
