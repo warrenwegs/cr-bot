@@ -3,10 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "cr-bot.js",
-  "dependencies": {
-    "botkit": "^0.2.2"
-  },
-  "devDependencies": {},
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -19,5 +15,9 @@
   "bugs": {
     "url": "https://github.com/warrenwegs/cr-bot/issues"
   },
-  "homepage": "https://github.com/warrenwegs/cr-bot#readme"
+  "homepage": "https://github.com/warrenwegs/cr-bot#readme",
+  "dependencies": {
+    "slackbots": "^0.5.2",
+    "sqlite": "^2.2.0"
+  }
 }

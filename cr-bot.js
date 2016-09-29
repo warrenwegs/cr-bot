@@ -1,262 +1,151 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-           ______     ______     ______   __  __     __     ______
-          /\  == \   /\  __ \   /\__  _\ /\ \/ /    /\ \   /\__  _\
-          \ \  __<   \ \ \/\ \  \/_/\ \/ \ \  _"-.  \ \ \  \/_/\ \/
-           \ \_____\  \ \_____\    \ \_\  \ \_\ \_\  \ \_\    \ \_\
-            \/_____/   \/_____/     \/_/   \/_/\/_/   \/_/     \/_/
+'use strict';
 
+var util = require('util');
+var path = require('path');
+var fs = require('fs');
+var SQLite = require('sqlite3').verbose();
+var Bot = require('slackbots');
 
-This is a sample Slack bot built with Botkit.
+var CrBot = function Constructor(settings) {
+    this.settings = settings;
+    this.settings.name = this.settings.name || 'cr-bot';
+    this.dbPath = settings.dbPath || path.resolve(process.cwd(), 'data', 'crBot.db');
 
-This bot demonstrates many of the core features of Botkit:
+    this.user = null;
+    this.db = null;
 
-* Connect to Slack using the real time API
-* Receive messages based on "spoken" patterns
-* Reply to messages
-* Use the conversation system to ask questions
-* Use the built in storage system to store and retrieve information
-  for a user.
+    CrBot.prototype.run = function() {
+        CrBot.super_.call(this, this.settings);
 
-# RUN THE BOT:
-
-  Get a Bot token from Slack:
-
-    -> http://my.slack.com/services/new/bot
-
-  Run your bot from the command line:
-
-    token=<MY TOKEN> node slack_bot.js
-
-# USE THE BOT:
-
-  Find your bot inside Slack to send it a direct message.
-
-  Say: "Hello"
-
-  The bot will reply "Hello!"
-
-  Say: "who are you?"
-
-  The bot will tell you its name, where it is running, and for how long.
-
-  Say: "Call me <nickname>"
-
-  Tell the bot your nickname. Now you are friends.
-
-  Say: "who am I?"
-
-  The bot will tell you your nickname, if it knows one for you.
-
-  Say: "shutdown"
-
-  The bot will ask if you are sure, and then shut itself down.
-
-  Make sure to invite your bot into other channels using /invite @<my bot>!
-
-# EXTEND THE BOT:
-
-  Botkit has many features for building cool and useful bots!
-
-  Read all about it here:
-
-    -> http://howdy.ai/botkit
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
-
-
-if (!process.env.token) {
-    console.log('Error: Specify token in environment');
-    process.exit(1);
-}
-
-var SlackBot = require('./lib/SlackBot.js');
-var os = require('os');
-
-var controller = SlackBot({
-    debug: true,
-    json_file_store: './db_cr-bot/'
-});
-
-var bot = controller.spawn({
-    token: process.env.token
-}).startRTM();
-
-
-controller.hears(['git.kiwicollection.net\/kiwicollection\/(.*)\/commit\/([a-zA-Z0-9]*)'],['ambient'], function(bot, message) {
-
-    bot.api.reactions.add({
-        timestamp: message.ts,
-        channel: message.channel,
-        name: 'robot_face',
-    }, function(err, res) {
-        if (err) {
-            bot.botkit.log('Failed to add emoji reaction :(', err);
-        }
-    });
-
-    var repo = message.match[1];
-    var commit = message.match[2];
-
-    bot.api.users.info({user: message.user}, function(error, response) {
-        var author = response.user.profile.first_name;
-        bot.reply(message, 'New review by ' + author + ' added with commit: *' + commit + '* in *' + repo + '* repo!');
-
-        controller.storage.users.get(message.user, function(err, user) {
-            if (!user) {
-                user = { id: message.user };
-            };
-            user.name = response.user.profile.first_name;
-            user[commit] = { relation: "submitter", repo: repo, date: message.ts };
-
-            controller.storage.users.save(user, function(err, id) {
-
-            })
-        })
-    });
-});
-
-controller.hears(['beers'], 'ambient', function(bot, message) {
-    bot.api.users.info({user: message.user}, function(error, response) {
-        var author = response.user.profile.first_name;
-        bot.reply(message, 'New review by ' + author);
-
-        controller.storage.users.get(message.user, function(err, user) {
-            if (!user) {
-                user = { id: message.user };
-            };
-            user.name = response.user.profile.first_name;
-            user[commit] = { relation: "reviewer", repo: repo, date: message.ts };
-
-            controller.storage.users.save(user, function(err, id) {
-
-            })
-        })
-    });
-});
-
-controller.hears(['what is my name', 'who am i'], 'direct_message,direct_mention,mention', function(bot, message) {
-
-    controller.storage.users.get(message.user, function(err, user) {
-        if (user && user.name) {
-            bot.reply(message, 'Your name is ' + user.name);
-        } else {
-            bot.startConversation(message, function(err, convo) {
-                if (!err) {
-                    convo.say('I do not know your name yet!');
-                    convo.ask('What should I call you?', function(response, convo) {
-                        convo.ask('You want me to call you `' + response.text + '`?', [
-                            {
-                                pattern: 'yes',
-                                callback: function(response, convo) {
-                                    // since no further messages are queued after this,
-                                    // the conversation will end naturally with status == 'completed'
-                                    convo.next();
-                                }
-                            },
-                            {
-                                pattern: 'no',
-                                callback: function(response, convo) {
-                                    // stop the conversation. this will cause it to end with status == 'stopped'
-                                    convo.stop();
-                                }
-                            },
-                            {
-                                default: true,
-                                callback: function(response, convo) {
-                                    convo.repeat();
-                                    convo.next();
-                                }
-                            }
-                        ]);
-
-                        convo.next();
-
-                    }, {'key': 'nickname'}); // store the results in a field called nickname
-
-                    convo.on('end', function(convo) {
-                        if (convo.status == 'completed') {
-                            bot.reply(message, 'OK! I will update my dossier...');
-
-                            controller.storage.users.get(message.user, function(err, user) {
-                                if (!user) {
-                                    user = {
-                                        id: message.user,
-                                    };
-                                }
-                                user.name = convo.extractResponse('nickname');
-                                controller.storage.users.save(user, function(err, id) {
-                                    bot.reply(message, 'Got it. I will call you ' + user.name + ' from now on.');
-                                });
-                            });
-
-
-
-                        } else {
-                            // this happens if the conversation ended prematurely for some reason
-                            bot.reply(message, 'OK, nevermind!');
-                        }
-                    });
-                }
-            });
-        }
-    });
-});
-
-
-controller.hears(['shutdown'], 'direct_message,direct_mention,mention', function(bot, message) {
-
-    bot.startConversation(message, function(err, convo) {
-
-        convo.ask('Are you sure you want me to shutdown?', [
-            {
-                pattern: bot.utterances.yes,
-                callback: function(response, convo) {
-                    convo.say('Bye!');
-                    convo.next();
-                    setTimeout(function() {
-                        process.exit();
-                    }, 3000);
-                }
-            },
-        {
-            pattern: bot.utterances.no,
-            default: true,
-            callback: function(response, convo) {
-                convo.say('*Phew!*');
-                convo.next();
-            }
-        }
-        ]);
-    });
-});
-
-
-controller.hears(['uptime', 'identify yourself', 'who are you', 'what is your name'],
-    'direct_message,direct_mention,mention', function(bot, message) {
-
-        var hostname = os.hostname();
-        var uptime = formatUptime(process.uptime());
-
-        bot.reply(message,
-            ':robot_face: I am a bot named <@' + bot.identity.name +
-             '>. I have been running for ' + uptime + ' on ' + hostname + '.');
-
-    });
-
-function formatUptime(uptime) {
-    var unit = 'second';
-    if (uptime > 60) {
-        uptime = uptime / 60;
-        unit = 'minute';
-    }
-    if (uptime > 60) {
-        uptime = uptime / 60;
-        unit = 'hour';
-    }
-    if (uptime != 1) {
-        unit = unit + 's';
+        this.on('start', this._onStart);
+        this.on('message', this._onMessage);
     }
 
-    uptime = uptime + ' ' + unit;
-    return uptime;
-}
+    CrBot.prototype._onStart = function() {
+        this._loadBotUser();
+        this._connectDb();
+        this._firstRunCheck();
+    }
+
+    CrBot.prototype._loadBotUser = function() {
+        var self = this;
+        this.user = this.users.filter(function(user) {
+            return user.name === self.name;
+        })[0];
+    };
+
+    CrBot.prototype._connectDb = function() {
+        if (!fs.existsSync(this.dbPath)) {
+            console.error('Database path ' + '"' + this.dbPath + '" does not exist or it\'s not readable.');
+            process.exit(1);
+        }
+
+        this.db = new SQLite.Database(this.dbPath);
+    }
+
+    CrBot.prototype._firstRunCheck = function() {
+        var self = this;
+        // self.db.get('SELECT val FROM info WHERE name = "lastrun" LIMIT 1', function(err, record) {
+            // if (err) {
+            //     return console.error('DATABASE ERROR:', err);
+            // }
+
+            var currentTime = (new Date()).toJSON();
+
+            // this is a first run
+            // if (!record) {
+                self._welcomMessage();
+            //     return self.db.run('INSERT INTO info(name, val) VALUES("lastrun", ?', currentTime);
+            // }
+
+            // updates with new last running time
+            // self.db.run('UPDATE info SET val = ? WHERE name = "lastrun"', currentTime);
+        // });
+    };
+
+    CrBot.prototype._welcomMessage = function() {
+        this.postMessageToChannel('fake-code-reviews', 'cr-bot has connected!', {as_user: true})
+    };
+
+    CrBot.prototype._onMessage = function(message) {
+        if (this._isChatMessage(message) &&
+            this._isChannelConversation(message) &&
+            !this._isFromSelf(message) &&
+            this._isCodePosting(message)
+        ) {
+            this.replyWithInfo(message);
+        }
+    }
+
+    CrBot.prototype._isChatMessage = function(message) {
+        return message.type === 'message' && Boolean(message.text);
+    };
+
+    CrBot.prototype._isChannelConversation = function(message) {
+        return typeof message.channel === 'string' &&
+            message.channel[0] === 'C'; // 'C' as the first char in channel id shows chat type channel
+    };
+
+    CrBot.prototype._isFromSelf = function(message) {
+        return message.user === this.user.id;
+    };
+
+    CrBot.prototype._isCodePosting = function(message) {
+        var stringCheck = 'git.kiwicollection';
+        return message.text.toLowerCase().indexOf(stringCheck) > -1;
+    }
+
+    CrBot.prototype._replyWithInfo = function(message) {
+        var self = this;
+        // self.db.get('SELECT id, commit FROM commits' function(err, record) {
+            // if(err) {
+            //     return console.error('DATABASE ERROR:', err);
+            // }
+
+            var channel = self._getChannelById(originalMessage.channel);
+            // self.postMessageToChannel(channel.name, record.commit, {as_user: true});
+            self.postMessageToChannel(channel.name, 'record.commit', {as_user: true});
+            // self.db.run('UPDATE commits SET ')
+        // });
+    };
+
+    CrBot.prototype._getChannelById = function(channelId) {
+        return this.channels.filter(function(item) {
+            return item.id === channelId;
+        })[0];
+    };
+};
+
+util.inherits(CrBot, Bot);
+
+module.exports = CrBot;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
