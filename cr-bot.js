@@ -64,16 +64,18 @@ var CrBot = function Constructor(settings) {
     };
 
     CrBot.prototype._welcomMessage = function() {
-        this.postMessageToChannel('fake-code-reviews', 'cr-bot has connected!', {as_user: true})
+        // this.postMessageToChannel('XXXXXcode-reviews', 'cr-bot has connected!', {as_user: true})
     };
 
     CrBot.prototype._onMessage = function(message) {
+        // console.log(message);
         if (this._isChatMessage(message) &&
-            this._isChannelConversation(message) &&
             !this._isFromSelf(message) &&
+            // this._isChannelConversation(message) && //only listens to the channel the bot is in anyways. I think this fails since the private channel starts with 'G'
             this._isCodePosting(message)
         ) {
-            this.replyWithInfo(message);
+            console.log('heard something');
+            this._replyWithInfo(message);
         }
     }
 
@@ -82,29 +84,40 @@ var CrBot = function Constructor(settings) {
     };
 
     CrBot.prototype._isChannelConversation = function(message) {
+        console.log('in channel', typeof message.channel === 'string' && message.channel[0] === 'C');
         return typeof message.channel === 'string' &&
             message.channel[0] === 'C'; // 'C' as the first char in channel id shows chat type channel
     };
 
     CrBot.prototype._isFromSelf = function(message) {
+        console.log('from self', message.user === this.user.id);
         return message.user === this.user.id;
     };
 
     CrBot.prototype._isCodePosting = function(message) {
-        var stringCheck = 'git.kiwicollection';
+        var stringCheck = 'hi';
+        console.log('is code posting', message.text.toLowerCase().indexOf(stringCheck) > -1);
         return message.text.toLowerCase().indexOf(stringCheck) > -1;
     }
 
     CrBot.prototype._replyWithInfo = function(message) {
         var self = this;
+        var pattern = new RegExp('git.kiwicollection.net\/kiwicollection\/(.*)\/commit\/([a-zA-Z0-9]*)')
+        var matches = pattern.exec(message.text);
+
+        var repo = matches[1];
+        var commit = matches[2];
+        var user = self._getUserById(message.user);
+
+        var response = 'New review by ' + user.first_name + ' added with commit *' + commit + '* in *' + repo + '* repo!';
+
         // self.db.get('SELECT id, commit FROM commits' function(err, record) {
             // if(err) {
             //     return console.error('DATABASE ERROR:', err);
             // }
-
-            var channel = self._getChannelById(originalMessage.channel);
+            var group = self._getGroupById(message.channel);
             // self.postMessageToChannel(channel.name, record.commit, {as_user: true});
-            self.postMessageToChannel(channel.name, 'record.commit', {as_user: true});
+            self.postMessageToGroup(group.name, response, {as_user: true});
             // self.db.run('UPDATE commits SET ')
         // });
     };
@@ -112,6 +125,18 @@ var CrBot = function Constructor(settings) {
     CrBot.prototype._getChannelById = function(channelId) {
         return this.channels.filter(function(item) {
             return item.id === channelId;
+        })[0];
+    };
+
+    CrBot.prototype._getGroupById = function(groupId) {
+        return this.groups.filter(function(item) {
+            return item.id === groupId;
+        })[0];
+    };
+
+    CrBot.prototype._getUserById = function(userId) {
+        return this.users.filter(function(item) {
+            return item.id === userId;
         })[0];
     };
 };
