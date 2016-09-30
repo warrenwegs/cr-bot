@@ -109,7 +109,7 @@ var CrBot = function Constructor(settings) {
         var commit = matches[2];
         var user = self._getUserById(message.user);
 
-        var response = 'New review by ' + user.first_name + ' added with commit *' + commit + '* in *' + repo + '* repo!';
+        var response = 'New review by ' + user.real_name + ' added with commit *' + commit + '* in *' + repo + '* repo!';
 
         // self.db.get('SELECT id, commit FROM commits' function(err, record) {
             // if(err) {
