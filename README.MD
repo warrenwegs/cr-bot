@@ -1,1 +1,3 @@
-# run with BOT_API_KEY=my_key_is_here node bin/bot.js
+# cr-bot
+
+run with npm start
