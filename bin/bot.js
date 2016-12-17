@@ -40,7 +40,7 @@ app.listen(app.get('port'), function() {
 app.get('/broken-develop', function (req, res) {
     // this route will send a message to the current build dunce that the build is broken.
     crbot.postMessage(currentDunce, "Tests are failing on develop! Go find out who broke everything!", {as_user: true})
-
+    res.send("Tests are failing on develop sent!");
 })
 
 // run with BOT_API_KEY=my_key_is_here node bin/bot.js
