@@ -67,7 +67,7 @@ var CrBot = function Constructor(settings) {
 
             // this is a first run
             // if (!record) {
-                self._welcomMessage();
+                self._welcomeMessage();
             //     return self.db.run('INSERT INTO info(name, val) VALUES("lastrun", ?', currentTime);
             // }
 
@@ -76,7 +76,7 @@ var CrBot = function Constructor(settings) {
         // });
     };
 
-    CrBot.prototype._welcomMessage = function() {
+    CrBot.prototype._welcomeMessage = function() {
         // this.postMessageToChannel('XXXXXcode-reviews', 'cr-bot has connected!', {as_user: true})
     };
 
@@ -86,6 +86,7 @@ var CrBot = function Constructor(settings) {
             if (this._isChatMessage(message)) {
                 this._handleCodeReviewPosting(message);
                 this._handleGitHistoryPosting(message);
+                this._handleNewBuildDunce(message);
             } else {
                 this._handleReactionAdded(message);
                 this._handleReactionRemoved(message);
@@ -112,6 +113,18 @@ var CrBot = function Constructor(settings) {
 
     CrBot.prototype._handleGitHistoryPosting = function(message) {
         return;
+    }
+
+    CrBot.prototype._handleNewBuildDunce = function(message) {
+        var pattern = new RegExp('kiwibot.+build.+dunce.+@(\\w+).+')
+        var matches = pattern.exec(message.text);
+        if (matches) {
+            var user = this.getUserById(matches[1]);
+            currentDunce = matches[1];
+            this.postMessage(currentDunce, "Hey, you're the new Build Dunce! You broke the build, so now it's your job to find out what's wrong the next time a test fails. Fun!", {as_user: true});
+            var dunceMessage = "The new Build Dunce is " + currentDunce + " (sorry I can't convert a user id to a name just yet)";
+            this.postMessageToChannel('test-channel', dunceMessage, {as_user: true});
+        }
     }
 
     CrBot.prototype._handleCodeReviewPosting = function(message) {

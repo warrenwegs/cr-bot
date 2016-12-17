@@ -18,6 +18,10 @@
   },
   "homepage": "https://github.com/warrenwegs/cr-bot#readme",
   "dependencies": {
+    "body-parser": "^1.15.2",
+    "express": "^4.14.0",
+    "path": "^0.12.7",
+    "request": "^2.79.0",
     "slackbots": "^0.5.2",
     "sqlite3": "^3.1.4"
   }
