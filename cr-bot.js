@@ -116,13 +116,13 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._handleNewBuildDunce = function(message) {
-        var pattern = new RegExp('kiwibot.+build.+dunce.+@(\\w+).+')
+        var pattern = new RegExp('kiwibot.+new.+build.+watcher.+@(\\w+).+')
         var matches = pattern.exec(message.text);
         if (matches) {
             var user = this.getUserById(matches[1]);
-            currentDunce = matches[1];
-            this.postMessage(currentDunce, "Hey, you're the new Build Dunce! You broke the build, so now it's your job to find out what's wrong the next time a test fails. Fun!", {as_user: true});
-            var dunceMessage = "The new Build Dunce is " + currentDunce + " (sorry I can't convert a user id to a name just yet)";
+            currentDunce = user.name;
+            this.postMessage(currentDunce, "Hey, you're the new build watcher! You broke the build, so now it's your job to find out what's wrong the next time a test fails.", {as_user: true});
+            var dunceMessage = "The new Build Watcher is " + currentDunce;
             this.postMessageToChannel('test-channel', dunceMessage, {as_user: true});
         }
     }
