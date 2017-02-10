@@ -57,23 +57,6 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._firstRunCheck = function() {
-        var self = this;
-        // self.db.get('SELECT val FROM info WHERE name = "lastrun" LIMIT 1', function(err, record) {
-            // if (err) {
-            //     return console.error('DATABASE ERROR:', err);
-            // }
-
-            var currentTime = (new Date()).toJSON();
-
-            // this is a first run
-            // if (!record) {
-                self._welcomeMessage();
-            //     return self.db.run('INSERT INTO info(name, val) VALUES("lastrun", ?', currentTime);
-            // }
-
-            // updates with new last running time
-            // self.db.run('UPDATE info SET val = ? WHERE name = "lastrun"', currentTime);
-        // });
     };
 
     CrBot.prototype._welcomeMessage = function() {
@@ -84,9 +67,12 @@ var CrBot = function Constructor(settings) {
         console.log(message);
         if (!this._isFromSelf(message)) {
             if (this._isChatMessage(message)) {
-                this._handleCodeReviewPosting(message);
-                this._handleGitHistoryPosting(message);
                 this._handleNewBuildDunce(message);
+                if (message.channel === 'C0QVCGV6W' || message.channel === 'G2EFS8NP8') {
+                    this._handleCodeReviewPosting(message);
+                } else if (message.channel === 'C04LDVBBS') {
+                    this._handleGitHistoryPosting(message);
+                }
             } else {
                 this._handleReactionAdded(message);
                 this._handleReactionRemoved(message);
@@ -112,7 +98,7 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._handleGitHistoryPosting = function(message) {
-        return;
+        var commits = this._parseGitHistoryMessage(message);
     }
 
     CrBot.prototype._handleNewBuildDunce = function(message) {
@@ -127,46 +113,73 @@ var CrBot = function Constructor(settings) {
         }
     }
 
-    CrBot.prototype._handleCodeReviewPosting = function(message) {
-        var pattern = new RegExp('git.kiwicollection.net\/kiwicollection\/([\\w-]*)\/(?:commit|blob)\/(\\w{40})')
-        var matches = pattern.exec(message.text);
+    CrBot.prototype._parseGitHistoryMessage = function(message) {
+        var commits = [];
+        var pattern = new RegExp('git.kiwicollection.net\/kiwicollection\/([\\w-]*)\/(?:commit|blob)\/(\\w{40})');
 
-        if (matches) {
-            var repo = matches[1];
-            var commit = matches[2];
+        message.attachements.forEach(function(attachement) {
+            var commit = {};
 
-            if (repo && commit) {
-                var date = message.ts.split(".")
-                var datestamp = date[0];
-                var intervalstamp = date[1];
-
-                var self = this;
-                this._getUserByUId(message.user, function(user) {
-                    self._saveCommit(commit, repo, user.id, datestamp, intervalstamp);
-
-                    self._addBotReaction(message);
-                })
-            }
-        }
-
+            // attachement.fallback;
+        });
     }
-    CrBot.prototype._saveCommit = function(commitHash, repo, userId, datestamp, intervalstamp) {
-        console.log(commitHash, repo, userId, datestamp, intervalstamp);
-        this.db.run('INSERT INTO commits(hash, repository, user_id, datestamp, intervalstamp) VALUES($hash, $repo, $user, $date, $interval)', {
-            $hash: commitHash,
-            $repo: repo,
-            $user: userId,
-            $date: datestamp,
-            $interval: intervalstamp,
-        }, function(err, record) {
-            if (err) {
-                return console.error('DATABASE ERROR:', err);
+
+    CrBot.prototype._handleCodeReviewPosting = function(message) {
+        var self = this;
+        var commits = this._parseCodeReviewMessage(message);
+
+        if (commits) {
+            self._getUserByUId(message.user, function(user) {
+                self._saveCommits(commits, user.id);
+            });
+        }
+        this._addBotReaction(message);
+    }
+
+    CrBot.prototype._parseCodeReviewMessage = function(message) {
+        var pattern = new RegExp('git.kiwicollection.net\/kiwicollection\/([\\w-]*)\/(?:commit|blob)\/(\\w{40})');
+
+        var commits = [];
+
+        var lines = message.text.split("\n");
+        var date = message.ts.split(".")
+        var datestamp = date[0];
+        var intervalstamp = date[1];
+
+        lines.forEach(function(line) {
+            var matches = pattern.exec(line);
+
+            if (matches) {
+                var commit = {};
+                commit.repo = matches[1];
+                commit.hash = matches[2];
+                commit.datestamp = datestamp;
+                commit.intervalstamp = intervalstamp;
+                commits.push(commit);
             } 
+        });
+
+        return commits;
+    }
+
+    CrBot.prototype._saveCommits = function(commits, userId) {
+        var self = this;console.log(commits);
+        commits.forEach(function(commit) {
+            self.db.run('INSERT INTO commits(hash, repository, user_id, datestamp, intervalstamp) VALUES($hash, $repo, $user, $date, $interval)', {
+                $hash: commit.hash,
+                $repo: commit.repo,
+                $user: userId,
+                $date: commit.datestamp,
+                $interval: commit.intervalstamp,
+            }, function(err, record) {
+                if (err) {
+                    return console.error('DATABASE ERROR:', err);
+                } 
+            });
         });
     }
 
     CrBot.prototype._getUserByUId = function(uid, callback) {
-        var db = this.db;
         var self = this;
 
         this.db.get('SELECT * FROM users WHERE uid = ?', uid, function(err, user) {
@@ -180,7 +193,7 @@ var CrBot = function Constructor(settings) {
                 // Move slack's id to uid property 
                 user.uid = user.id;
                 user.id = null;
-                db.run('INSERT INTO users(uid, name, real_name) VALUES(?, ?, ?)', user.uid, user.name, user.real_name, function(err) {
+                self.db.run('INSERT INTO users(uid, name, real_name) VALUES(?, ?, ?)', user.uid, user.name, user.real_name, function(err) {
                     if (err) {
                         return console.error('DATABASE ERROR:', err);
                     }
