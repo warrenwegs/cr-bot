@@ -13,6 +13,8 @@ var CrBot = function Constructor(settings) {
 
     this.user = null;
     this.db = null;
+    this.iReviewedReaction = ['eyes'];
+    this.iCommentedReaction = ['beer', 'beers'];
 
     CrBot.prototype.run = function() {
         CrBot.super_.call(this, this.settings);
@@ -51,7 +53,7 @@ var CrBot = function Constructor(settings) {
             console.log('Creating Tables...');
             this.db.run("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY ASC, uid TEXT, name TEXT, real_name TEXT UNIQUE)");
             this.db.run("CREATE TABLE IF NOT EXISTS commits (id INTEGER PRIMARY KEY ASC, hash TEXT UNIQUE, repository TEXT, datestamp INTEGER, intervalstamp INTEGER, user_id INTEGER, FOREIGN KEY(user_id) REFERENCES users(id))");
-            this.db.run("CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY ASC, commit_hash TEXT, datestamp INTEGER, intervalstamp INTEGER, user_id INTEGER, commented INTEGER, FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(commit_hash) REFERENCES commits(hash))");
+            this.db.run("CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY ASC, commit_hash TEXT, datestamp INTEGER, intervalstamp INTEGER, user_id INTEGER, commented INTEGER, type TEXT, FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(commit_hash) REFERENCES commits(hash))");
             console.log('Success');
         }
     }
@@ -66,15 +68,16 @@ var CrBot = function Constructor(settings) {
     CrBot.prototype._onMessage = function(message) {
         console.log(message);
         if (!this._isFromSelf(message)) {
-            if (this._isChatMessage(message)) {
-                this._handleNewBuildDunce(message);
-                if (message.channel === 'C0QVCGV6W' || message.channel === 'G2EFS8NP8') {
+            if ('message' === message.type && Boolean(message.text)) {
+                // this._handleNewBuildDunce(message);
+                if ('C0QVCGV6W' === message.channel || 'G2EFS8NP8' === message.channel) {
                     this._handleCodeReviewPosting(message);
-                } else if (message.channel === 'C04LDVBBS') {
+                } else if ('C04LDVBBS' === message.channel) {
                     this._handleGitHistoryPosting(message);
                 }
-            } else {
+            } else if ('reaction_added'  === message.type) {
                 this._handleReactionAdded(message);
+            } else if ('reaction_removed' === message.type) {
                 this._handleReactionRemoved(message);
             }
         }
@@ -85,32 +88,53 @@ var CrBot = function Constructor(settings) {
         return message.user === this.user.id;
     };
 
-    CrBot.prototype._isChatMessage = function(message) {
-        return message.type === 'message' && Boolean(message.text);
-    };
-
     CrBot.prototype._handleReactionAdded = function(message) {
-        return message.type === 'reaction_added';
+        var self = this;
+        if (self.iCommentedReaction.includes(message.reaction) || self.iReviewedReaction.includes(message.reaction)) {
+            var stamps = self._getDateStamps(message.item.ts);
+            self._getCommitByStamps(stamps, function(commit) {
+                if (commit) {
+                    self._getUserByUId(message.user, function(user) {
+                        self._saveReviewed(message, commit, user.id);
+                    });
+                }
+            })
+        }
+    }
+
+    CrBot.prototype._saveReviewed = function(message, commit, userId) {
+        var commented = this.iCommentedReaction.includes(message.reaction);
+        var stamps = this._getDateStamps(message.item.ts);
+        var type = message.reaction;
+
+        this.db.run('INSERT INTO reviews(commit_hash, user_id, datestamp, intervalstamp, commented, type) VALUES($commit_hash, $user, $date, $interval, $commented, $type)', {
+            $commit_hash: commit.hash,
+            $user: userId,
+            $date: stamps.date,
+            $interval: stamps.interval,
+            $commented: commented,
+            $type: type
+        }, function(err, record) {
+            if (err) {
+                return console.error('DATABASE ERROR:', err);
+            }
+        });
     }
 
     CrBot.prototype._handleReactionRemoved = function(message) {
-        return message.type === 'reaction_removed';
+        var stamps = this._getDateStamps(message.item.ts);
+        var commented = this.iCommentedReaction.includes(message.reaction);
+        var type = message.reaction;
+
+        this.db.run('DELETE FROM reviews WHERE datestamp = ? AND intervalstamp = ? AND type = ?', stamps.date, stamps.interval, type, function(err) {
+            if (err) {
+                return console.error('DATABASE ERROR:', err);
+            }
+        })
     }
 
     CrBot.prototype._handleGitHistoryPosting = function(message) {
         var commits = this._parseGitHistoryMessage(message);
-    }
-
-    CrBot.prototype._handleNewBuildDunce = function(message) {
-        var pattern = new RegExp('kiwibot.+new.+build.+watcher.+@(\\w+).+')
-        var matches = pattern.exec(message.text);
-        if (matches) {
-            var user = this.getUserById(matches[1]);
-            currentDunce = user.name;
-            this.postMessage(currentDunce, "Hey, you're the new build watcher! You broke the build, so now it's your job to find out what's wrong the next time a test fails.", {as_user: true});
-            var dunceMessage = "The new Build Watcher is " + currentDunce;
-            this.postMessageToChannel('test-channel', dunceMessage, {as_user: true});
-        }
     }
 
     CrBot.prototype._parseGitHistoryMessage = function(message) {
@@ -133,7 +157,16 @@ var CrBot = function Constructor(settings) {
                 self._saveCommits(commits, user.id);
             });
         }
-        this._addBotReaction(message);
+        self._addBotReaction(message);
+    }
+
+    CrBot.prototype._getDateStamps = function(date) {
+        var items = date.split(".");
+        var stamps = {};
+        stamps.date = items[0];
+        stamps.interval = items[1];
+
+        return stamps;
     }
 
     CrBot.prototype._parseCodeReviewMessage = function(message) {
@@ -142,9 +175,7 @@ var CrBot = function Constructor(settings) {
         var commits = [];
 
         var lines = message.text.split("\n");
-        var date = message.ts.split(".")
-        var datestamp = date[0];
-        var intervalstamp = date[1];
+        var stamps = this._getDateStamps(message.ts);
 
         lines.forEach(function(line) {
             var matches = pattern.exec(line);
@@ -153,8 +184,8 @@ var CrBot = function Constructor(settings) {
                 var commit = {};
                 commit.repo = matches[1];
                 commit.hash = matches[2];
-                commit.datestamp = datestamp;
-                commit.intervalstamp = intervalstamp;
+                commit.datestamp = stamps.date;
+                commit.intervalstamp = stamps.interval;
                 commits.push(commit);
             } 
         });
@@ -163,7 +194,7 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._saveCommits = function(commits, userId) {
-        var self = this;console.log(commits);
+        var self = this;
         commits.forEach(function(commit) {
             self.db.run('INSERT INTO commits(hash, repository, user_id, datestamp, intervalstamp) VALUES($hash, $repo, $user, $date, $interval)', {
                 $hash: commit.hash,
@@ -199,7 +230,6 @@ var CrBot = function Constructor(settings) {
                     }
                     user.id = this.lastID;
                     callback(user);
-
                 });
             } else {
                 callback(user);
@@ -207,7 +237,34 @@ var CrBot = function Constructor(settings) {
         });
     }
 
+    CrBot.prototype._getCommitByStamps = function(stamps, callback) {
+        var self = this;
 
+        this.db.get('SELECT * FROM commits WHERE datestamp = ? AND intervalstamp = ?', stamps.date, stamps.interval, function(err, commit) {
+            if (err) {
+                return console.error('DATABASE ERROR:', err);
+            }
+
+            if (commit) {
+                callback(commit);
+            } else {
+                callback(false);
+            }
+        })
+    }
+
+
+    CrBot.prototype._handleNewBuildDunce = function(message) {
+        var pattern = new RegExp('kiwibot.+new.+build.+watcher.+@(\\w+).+')
+        var matches = pattern.exec(message.text);
+        if (matches) {
+            var user = this.getUserById(matches[1]);
+            currentDunce = user.name;
+            this.postMessage(currentDunce, "Hey, you're the new build watcher! You broke the build, so now it's your job to find out what's wrong the next time a test fails.", {as_user: true});
+            var dunceMessage = "The new Build Watcher is " + currentDunce;
+            this.postMessageToChannel('test-channel', dunceMessage, {as_user: true});
+        }
+    }
 
 
 
