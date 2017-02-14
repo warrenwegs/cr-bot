@@ -57,3 +57,11 @@ is code posting false
   item_user: 'U0DM5KLSZ',
   event_ts: '1476569941.334673',
   ts: '1476569941.000003' }
+
+  SELECT users.real_name, count(*) from commits join users on commits.user_id=users.id group by users.id;
+
+  SELECT users.real_name, count(*) from reviews join users on reviews.user_id=users.id group by users.id;
+
+SELECT (select count(*) from commits join users on commits.user_id=users.id group by users.id) + (select count(*) from reviews join users on users.id=reviews.user_id group by users.id);
+
+SELECT (select count(*) from commits join users on commits.user_id=users.id group by users.id) + (select count(*) from reviews join users on users.id=reviews.user_id group by users.id);

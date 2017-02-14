@@ -16,6 +16,21 @@ var CrBot = function Constructor(settings) {
     this.iReviewedReaction = ['eyes'];
     this.iCommentedReaction = ['beer', 'beers'];
 
+    this.months = {
+        'jan': 0,
+        'feb': 1,
+        'mar': 2,
+        'apr': 3,
+        'may': 4,
+        'jun': 5,
+        'jul': 6,
+        'aug': 7,
+        'sep': 8,
+        'oct': 9,
+        'nov': 10,
+        'dec': 11
+    }
+
     CrBot.prototype.run = function() {
         CrBot.super_.call(this, this.settings);
 
@@ -27,6 +42,7 @@ var CrBot = function Constructor(settings) {
         this._loadBotUser();
         this._connectDb();
         this._firstRunCheck();
+        // this._welcomeMessage();
     }
 
     CrBot.prototype._loadBotUser = function() {
@@ -62,7 +78,8 @@ var CrBot = function Constructor(settings) {
     };
 
     CrBot.prototype._welcomeMessage = function() {
-        // this.postMessageToChannel('XXXXXcode-reviews', 'cr-bot has connected!', {as_user: true})
+        this.postMessageToGroup('fake-code-reviews', 'cr-bot has connected!', {as_user: true});
+        this.postMessageToChannel('code-reviews', 'cr-bot has connected!', {as_user: true});
     };
 
     CrBot.prototype._onMessage = function(message) {
@@ -144,21 +161,94 @@ var CrBot = function Constructor(settings) {
         message.attachements.forEach(function(attachement) {
             var commit = {};
 
-            // attachement.fallback;
+            // attachement.fallback; // I think this was a fallback url?
         });
     }
 
     CrBot.prototype._handleCodeReviewPosting = function(message) {
         var self = this;
-        var commits = this._parseCodeReviewMessage(message);
+        var commits = this._parseCodeReviewCommits(message);
+        var command = this._parseCodeReviewCommand(message);
 
-        if (commits) {
+        if (0 != commits.length) {
             self._getUserByUId(message.user, function(user) {
                 self._saveCommits(commits, user.id);
             });
+            self._addBotReaction(message);
         }
-        self._addBotReaction(message);
+
+        switch(command.name) {
+            case 'help':
+                this._helpMessage(message.channel);
+                break;
+            case 'stats':
+                this._statsMessage(message.channel, command.arg);
+                break;
+            default:
+                break;
+        }
     }
+
+    CrBot.prototype._helpMessage = function(channel) {
+        var helpText = "cr-bot commands: \r\
+        help - returns this help text \r\
+        stats - returns the current months code reviews leaderboard \r\
+        stats overall - returns the total code reviews leaderboard \r\
+        stats month -  eg jan; returns the code reviews leaderboard for that month";
+        this.postMessage(channel, helpText)
+    }
+
+    CrBot.prototype._statsMessage = function(channel, arg) {
+        switch(arg) {
+            case 'overall':
+                var stats = this._getOverallStats();
+                break;
+            case Object.keys(this.months).includes(arg):
+                var stats = $this._getMonthStats(arg);
+                break;
+            default:
+                var stats = this._getOverallStats();
+                break;
+        }
+    }
+
+    CrBot.prototype._getOverallStats = function() {
+        var self = this;console.log('here');
+        self.db.all('SELECT users.id, users.real_name, COUNT(*) AS count FROM commits JOIN users ON commits.user_id=users.id GROUP BY users.id', function(err, commits) {
+            if (err) {
+                return console.error('DATABASE ERROR:', err);
+            } 
+            self.db.all('SELECT users.id, users.real_name, reviews.commented, COUNT(*) AS count FROM reviews JOIN users ON reviews.user_id=users.id GROUP BY users.id, commented', function(err, reviews) {
+                self._buildStatsTable(commits, reviews);
+            })
+        });
+    }
+
+    CrBot.prototype._buildStatsTable = function(commits, reviews) {
+        var table = {};
+
+        commits.forEach(function(commit) {
+            var row = {};
+            row.id = commit.id;
+            row.name = commit.real_name;
+            row.commits = commit.commits;
+            row.total = commit.count;
+            table[commit.id] = row;
+        });
+
+        reviews.forEach(function(review) {
+            if (1 === review.commented) {
+                table[review.id].commented = review.count;
+                table[review.id].total = table[review.id].total + review.count;
+            } else {
+                table[review.id].looked = review.count;
+                table[review.id].total = table[review.id].total + review.count;
+            }
+        });
+
+        console.log(table);
+    }
+
 
     CrBot.prototype._getDateStamps = function(date) {
         var items = date.split(".");
@@ -169,7 +259,25 @@ var CrBot = function Constructor(settings) {
         return stamps;
     }
 
-    CrBot.prototype._parseCodeReviewMessage = function(message) {
+    CrBot.prototype._parseCodeReviewCommand = function(message) {
+        var pattern = new RegExp('cr-bot:(\\w*)\\s*(.*)')
+
+        var command = {name: null};
+        var lines = message.text.split("\n");
+
+        lines.forEach(function(line) {
+            var matches = pattern.exec(line);
+
+            if (matches) {
+                command.name = matches[1].toLowerCase();
+                command.arg = matches[2];
+            } 
+        });
+
+        return command;
+    }
+
+    CrBot.prototype._parseCodeReviewCommits = function(message) {
         var pattern = new RegExp('git.kiwicollection.net\/kiwicollection\/([\\w-]*)\/(?:commit|blob)\/(\\w{40})');
 
         var commits = [];
@@ -196,7 +304,7 @@ var CrBot = function Constructor(settings) {
     CrBot.prototype._saveCommits = function(commits, userId) {
         var self = this;
         commits.forEach(function(commit) {
-            self.db.run('INSERT INTO commits(hash, repository, user_id, datestamp, intervalstamp) VALUES($hash, $repo, $user, $date, $interval)', {
+            self.db.run('na', {
                 $hash: commit.hash,
                 $repo: commit.repo,
                 $user: userId,
@@ -250,7 +358,7 @@ var CrBot = function Constructor(settings) {
             } else {
                 callback(false);
             }
-        })
+        });
     }
 
 
@@ -267,12 +375,28 @@ var CrBot = function Constructor(settings) {
     }
 
 
-
-
     CrBot.prototype._isChannelConversation = function(message) {
         console.log('in channel', typeof message.channel === 'string' && message.channel[0] === 'C');
         return typeof message.channel === 'string' &&
             message.channel[0] === 'C'; // 'C' as the first char in channel id shows chat type channel
+    };
+
+    CrBot.prototype._getChannelById = function(channelId) {
+        return this.channels.filter(function(item) {
+            return item.id === channelId;
+        })[0];
+    };
+
+    CrBot.prototype._getGroupById = function(groupId) {
+        return this.groups.filter(function(item) {
+            return item.id === groupId;
+        })[0];
+    };
+
+    CrBot.prototype._getUserById = function(userId) {
+        return this.users.filter(function(item) {
+            return item.id === userId;
+        })[0];
     };
 
     CrBot.prototype._replyWithInfo = function(message) {
@@ -295,24 +419,6 @@ var CrBot = function Constructor(settings) {
             self.postMessageToGroup(group.name, response, {as_user: true});
             // self.db.run('UPDATE commits SET ')
         // });
-    };
-
-    CrBot.prototype._getChannelById = function(channelId) {
-        return this.channels.filter(function(item) {
-            return item.id === channelId;
-        })[0];
-    };
-
-    CrBot.prototype._getGroupById = function(groupId) {
-        return this.groups.filter(function(item) {
-            return item.id === groupId;
-        })[0];
-    };
-
-    CrBot.prototype._getUserById = function(userId) {
-        return this.users.filter(function(item) {
-            return item.id === userId;
-        })[0];
     };
 
     CrBot.prototype._addBotReaction = function(message) {
