@@ -213,7 +213,7 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._getOverallStats = function() {
-        var self = this;console.log('here');
+        var self = this;
         self.db.all('SELECT users.id, users.real_name, COUNT(*) AS count FROM commits JOIN users ON commits.user_id=users.id GROUP BY users.id', function(err, commits) {
             if (err) {
                 return console.error('DATABASE ERROR:', err);
@@ -231,12 +231,24 @@ var CrBot = function Constructor(settings) {
             var row = {};
             row.id = commit.id;
             row.name = commit.real_name;
-            row.commits = commit.commits;
+            row.commits = commit.count;
+            row.commented = 0;
+            row.looked = 0;
             row.total = commit.count;
             table[commit.id] = row;
         });
 
         reviews.forEach(function(review) {
+            if (!table[review.id]) {
+                var row = {};
+                row.id = review.id;
+                row.name = review.real_name;
+                row.commits = 0;
+                row.commented = 0;
+                row.looked = 0;
+                row.total = 0;
+                table[review.id] = row;
+            }
             if (1 === review.commented) {
                 table[review.id].commented = review.count;
                 table[review.id].total = table[review.id].total + review.count;
@@ -246,7 +258,16 @@ var CrBot = function Constructor(settings) {
             }
         });
 
-        console.log(table);
+        var leaderboard = []
+        for (var row in table) {
+            leaderboard.push(table[row]);
+        }
+
+        leaderboard.sort(function(a,b) {
+            return (a.total > b.total) ? -1 : ((b.total > a.total) ? 1 :0);
+        })
+
+        console.log(leaderboard);
     }
 
 
