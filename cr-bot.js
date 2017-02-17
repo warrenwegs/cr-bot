@@ -83,7 +83,6 @@ var CrBot = function Constructor(settings) {
     };
 
     CrBot.prototype._onMessage = function(message) {
-        console.log(message);
         if (!this._isFromSelf(message)) {
             if ('message' === message.type && Boolean(message.text)) {
                 // this._handleNewBuildDunce(message);
@@ -101,7 +100,6 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._isFromSelf = function(message) {
-        console.log('from self', message.user === this.user.id);
         return message.user === this.user.id;
     };
 
@@ -201,25 +199,25 @@ var CrBot = function Constructor(settings) {
     CrBot.prototype._statsMessage = function(channel, arg) {
         switch(arg) {
             case 'overall':
-                var stats = this._getOverallStats();
+                this.postMessage(channel, this._getOverallStats())
                 break;
             case Object.keys(this.months).includes(arg):
                 var stats = $this._getMonthStats(arg);
                 break;
             default:
-                var stats = this._getOverallStats();
+                this._getOverallStats(channel);
                 break;
         }
     }
 
-    CrBot.prototype._getOverallStats = function() {
+    CrBot.prototype._getOverallStats = function(channel) {
         var self = this;
         self.db.all('SELECT users.id, users.real_name, COUNT(*) AS count FROM commits JOIN users ON commits.user_id=users.id GROUP BY users.id', function(err, commits) {
             if (err) {
                 return console.error('DATABASE ERROR:', err);
             } 
             self.db.all('SELECT users.id, users.real_name, reviews.commented, COUNT(*) AS count FROM reviews JOIN users ON reviews.user_id=users.id GROUP BY users.id, commented', function(err, reviews) {
-                self._buildStatsTable(commits, reviews);
+                self.postMessage(channel, "```"+self._buildStatsTable(commits, reviews)+"```");
             })
         });
     }
@@ -267,7 +265,33 @@ var CrBot = function Constructor(settings) {
             return (a.total > b.total) ? -1 : ((b.total > a.total) ? 1 :0);
         })
 
-        console.log(leaderboard);
+        return this._formatLeaderboard(leaderboard);
+    }
+
+    CrBot.prototype._formatLeaderboard = function(leaderboard) {
+        var formattedRows = [['Rank', 'Name', 'Commits', 'Looked', 'Commented', 'Total']];
+        var i = 1;
+        leaderboard.forEach(function(row) {
+            var formattedRow = [String(i), row.name, row.commits, row.looked, row.commented, row.total];
+            i = i + 1;
+            formattedRows.push(formattedRow);
+        })
+
+        var padding = [0, 0, 0, 0, 0, 0];
+        formattedRows.forEach(function(row) {
+            row.forEach(function(item, j) {
+                padding[j] = Math.max(padding[j], String(item).length);
+            })
+        })
+        formattedRows.forEach(function(row, i) {
+            formattedRows[i] = '';
+            row.forEach(function(item, j) {
+                item = String(item).concat(' '.repeat(padding[j]+ 4 - String(item).length));
+                formattedRows[i] = formattedRows[i].concat(item);
+            })
+        })
+
+        return formattedRows.join("\n");
     }
 
 
@@ -397,7 +421,6 @@ var CrBot = function Constructor(settings) {
 
 
     CrBot.prototype._isChannelConversation = function(message) {
-        console.log('in channel', typeof message.channel === 'string' && message.channel[0] === 'C');
         return typeof message.channel === 'string' &&
             message.channel[0] === 'C'; // 'C' as the first char in channel id shows chat type channel
     };
