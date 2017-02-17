@@ -349,7 +349,7 @@ var CrBot = function Constructor(settings) {
     CrBot.prototype._saveCommits = function(commits, userId) {
         var self = this;
         commits.forEach(function(commit) {
-            self.db.run('na', {
+            self.db.run('INSERT INTO commits(hash, repository, user_id, datestamp, intervalstamp) VALUES($hash, $repo, $user, $date, $interval)', {
                 $hash: commit.hash,
                 $repo: commit.repo,
                 $user: userId,
