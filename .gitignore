@@ -3,4 +3,5 @@ node_modules/
 db_cr-bot
 .idea
 *.log
-data
+data/
+*.sqlite3
