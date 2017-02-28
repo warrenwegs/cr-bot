@@ -16,20 +16,7 @@ var CrBot = function Constructor(settings) {
     this.iReviewedReaction = ['eyes'];
     this.iCommentedReaction = ['beer', 'beers'];
 
-    this.months = {
-        'jan': 0,
-        'feb': 1,
-        'mar': 2,
-        'apr': 3,
-        'may': 4,
-        'jun': 5,
-        'jul': 6,
-        'aug': 7,
-        'sep': 8,
-        'oct': 9,
-        'nov': 10,
-        'dec': 11
-    }
+    this.months = {'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'may': 4, 'jun': 5, 'jul': 6, 'aug': 7, 'sep': 8, 'oct': 9, 'nov': 10, 'dec': 12}
 
     CrBot.prototype.run = function() {
         CrBot.super_.call(this, this.settings);
@@ -88,6 +75,7 @@ var CrBot = function Constructor(settings) {
                 // this._handleNewBuildDunce(message);
                 if ('C0QVCGV6W' === message.channel || 'G2EFS8NP8' === message.channel) {
                     this._handleCodeReviewPosting(message);
+                    this._handleCommand(message);
                 } else if ('C04LDVBBS' === message.channel) {
                     this._handleGitHistoryPosting(message);
                 }
@@ -98,10 +86,6 @@ var CrBot = function Constructor(settings) {
             }
         }
     }
-
-    CrBot.prototype._isFromSelf = function(message) {
-        return message.user === this.user.id;
-    };
 
     CrBot.prototype._handleReactionAdded = function(message) {
         var self = this;
@@ -115,6 +99,17 @@ var CrBot = function Constructor(settings) {
                 }
             })
         }
+    }
+
+    CrBot.prototype._handleReactionRemoved = function(message) {
+        var stamps = this._getDateStamps(message.item.ts);
+        var type = message.reaction;
+
+        this.db.run('DELETE FROM reviews WHERE datestamp = ? AND intervalstamp = ? AND type = ?', stamps.date, stamps.interval, type, function(err) {
+            if (err) {
+                return console.error('DATABASE ERROR:', err);
+            }
+        })
     }
 
     CrBot.prototype._saveReviewed = function(message, commit, userId) {
@@ -136,18 +131,6 @@ var CrBot = function Constructor(settings) {
         });
     }
 
-    CrBot.prototype._handleReactionRemoved = function(message) {
-        var stamps = this._getDateStamps(message.item.ts);
-        var commented = this.iCommentedReaction.includes(message.reaction);
-        var type = message.reaction;
-
-        this.db.run('DELETE FROM reviews WHERE datestamp = ? AND intervalstamp = ? AND type = ?', stamps.date, stamps.interval, type, function(err) {
-            if (err) {
-                return console.error('DATABASE ERROR:', err);
-            }
-        })
-    }
-
     CrBot.prototype._handleGitHistoryPosting = function(message) {
         var commits = this._parseGitHistoryMessage(message);
     }
@@ -166,7 +149,6 @@ var CrBot = function Constructor(settings) {
     CrBot.prototype._handleCodeReviewPosting = function(message) {
         var self = this;
         var commits = this._parseCodeReviewCommits(message);
-        var command = this._parseCodeReviewCommand(message);
 
         if (0 != commits.length) {
             self._getUserByUId(message.user, function(user) {
@@ -174,57 +156,96 @@ var CrBot = function Constructor(settings) {
             });
             self._addBotReaction(message);
         }
-
-        switch(command.name) {
-            case 'help':
-                this._helpMessage(message.channel);
-                break;
-            case 'stats':
-                this._statsMessage(message.channel, command.arg);
-                break;
-            default:
-                break;
-        }
     }
 
-    CrBot.prototype._helpMessage = function(channel) {
-        var helpText = "cr-bot commands: \r\
+    CrBot.prototype._handleCommand = function(message) {
+        var self = this;
+        var pattern = new RegExp('cr-bot:(\\w*)\\s*(.*)')
+
+        var command = {name: null};
+        var matches = pattern.exec(message.text);
+
+        if (matches) {
+            command.name = matches[1].toLowerCase();
+            command.arg = matches[2];
+            this._commandResponse(command, function(response) {
+                self.postMessage(message.channel, response);
+            });
+        } 
+
+    }
+
+    CrBot.prototype._commandResponse = function(command, postResponse) {
+        switch(command.name) {
+            case 'help':
+                return postResponse(this._helpMessage());
+                break;
+            case 'stats':
+                return this._statsMessage(command.arg, postResponse);
+                break;
+            default:
+                return 'Error parsing command: "' + command.name + '" Do cr-bot:help for a list of commands';
+                break;
+        };
+    }
+
+    CrBot.prototype._helpMessage = function() {
+        return "cr-bot commands: \r\
         help - returns this help text \r\
         stats - returns the current months code reviews leaderboard \r\
         stats overall - returns the total code reviews leaderboard \r\
         stats month -  eg jan; returns the code reviews leaderboard for that month";
-        this.postMessage(channel, helpText)
     }
 
-    CrBot.prototype._statsMessage = function(channel, arg) {
-        switch(arg) {
-            case 'overall':
-                this.postMessage(channel, this._getOverallStats())
-                break;
-            case Object.keys(this.months).includes(arg):
-                var stats = $this._getMonthStats(arg);
-                break;
-            default:
-                this._getOverallStats(channel);
-                break;
+    CrBot.prototype._statsMessage = function(arg, postResponse) {
+        if ('overall' == arg) {
+            return this._getOverallStats(function(response) {
+                postResponse("```Overall Leaders\n"  + response + "```");
+            });
+        } else if (Object.keys(this.months).includes(arg)) {
+            return this._getMonthStats(this.months[arg], function(response) {
+                postResponse("```" + arg.toUpperCase() + " Leaders\n"  + response + "```");
+            });
+        } else {
+            var today = new Date();
+            var monthInt = today.getMonth();
+            return this._getMonthStats(monthInt, function(response) {
+                postResponse("```This Months Leaders\n" + response + "```");
+            });
         }
     }
 
-    CrBot.prototype._getOverallStats = function(channel) {
+    CrBot.prototype._getOverallStats = function(postResponse) {
         var self = this;
-        self.db.all('SELECT users.id, users.real_name, COUNT(*) AS count FROM commits JOIN users ON commits.user_id=users.id GROUP BY users.id', function(err, commits) {
+        self.db.all('SELECT users.id, users.real_name, COUNT(commits.hash) AS count FROM users LEFT JOIN commits ON users.id=commits.user_id GROUP BY users.id', function(err, commits) {
             if (err) {
                 return console.error('DATABASE ERROR:', err);
             } 
-            self.db.all('SELECT users.id, users.real_name, reviews.commented, COUNT(*) AS count FROM reviews JOIN users ON reviews.user_id=users.id GROUP BY users.id, commented', function(err, reviews) {
-                self.postMessage(channel, "```"+self._buildStatsTable(commits, reviews)+"```");
+            self.db.all('SELECT users.id, users.real_name, reviews.commented, COUNT(*) AS count FROM users LEFT JOIN reviews ON reviews.user_id=users.id GROUP BY users.id, commented', function(err, reviews) {
+                postResponse(self._buildStatsTable(commits, reviews));
+            })
+        });
+    }
+
+    CrBot.prototype._getMonthStats = function(monthInt, postResponse) {
+        var self = this;
+        var today = new Date();
+        var fromDatestamp = new Date(today.getFullYear(), monthInt, 1).getTime() / 1000;
+        var toDatestamp = new Date(today.getFullYear(), monthInt + 1, 1).getTime() / 1000;
+
+        self.db.all('SELECT users.id, users.real_name, COUNT(commits.hash) AS count FROM users LEFT JOIN commits ON users.id=commits.user_id AND commits.datestamp > ? AND commits.datestamp < ? GROUP BY users.id', fromDatestamp, toDatestamp, function(err, commits) {
+            if (err) {
+                return console.error('DATABASE ERROR:', err);
+            } 
+            self.db.all('SELECT users.id, users.real_name, reviews.commented, COUNT(reviews.commit_hash) AS count FROM users LEFT JOIN reviews ON reviews.user_id=users.id AND reviews.datestamp > ? AND reviews.datestamp < ? GROUP BY users.id, commented', fromDatestamp, toDatestamp, function(err, reviews) {
+                postResponse(self._buildStatsTable(commits, reviews));
             })
         });
     }
 
     CrBot.prototype._buildStatsTable = function(commits, reviews) {
         var table = {};
-
+console.log(commits, reviews);
         commits.forEach(function(commit) {
             var row = {};
             row.id = commit.id;
@@ -256,25 +277,30 @@ var CrBot = function Constructor(settings) {
             }
         });
 
-        var leaderboard = []
+        var statsTable = []
         for (var row in table) {
-            leaderboard.push(table[row]);
+            statsTable.push(table[row]);
         }
 
-        leaderboard.sort(function(a,b) {
+        statsTable.sort(function(a,b) {
             return (a.total > b.total) ? -1 : ((b.total > a.total) ? 1 :0);
         })
 
-        return this._formatLeaderboard(leaderboard);
+        return this._formatLeaderboard(statsTable);
     }
 
-    CrBot.prototype._formatLeaderboard = function(leaderboard) {
+    CrBot.prototype._formatLeaderboard = function(statsTable) {
         var formattedRows = [['Rank', 'Name', 'Commits', 'Looked', 'Commented', 'Total']];
-        var i = 1;
-        leaderboard.forEach(function(row) {
-            var formattedRow = [String(i), row.name, row.commits, row.looked, row.commented, row.total];
-            i = i + 1;
+        var rank = 1;
+        var lastRowTotal = 0;
+
+        statsTable.forEach(function(row, i) {
+            if (row.total != lastRowTotal) {
+                rank = i + 1;
+            }
+            var formattedRow = [rank, row.name, row.commits, row.looked, row.commented, row.total];
             formattedRows.push(formattedRow);
+            lastRowTotal = row.total;
         })
 
         var padding = [0, 0, 0, 0, 0, 0];
@@ -302,24 +328,6 @@ var CrBot = function Constructor(settings) {
         stamps.interval = items[1];
 
         return stamps;
-    }
-
-    CrBot.prototype._parseCodeReviewCommand = function(message) {
-        var pattern = new RegExp('cr-bot:(\\w*)\\s*(.*)')
-
-        var command = {name: null};
-        var lines = message.text.split("\n");
-
-        lines.forEach(function(line) {
-            var matches = pattern.exec(line);
-
-            if (matches) {
-                command.name = matches[1].toLowerCase();
-                command.arg = matches[2];
-            } 
-        });
-
-        return command;
     }
 
     CrBot.prototype._parseCodeReviewCommits = function(message) {
@@ -474,6 +482,10 @@ var CrBot = function Constructor(settings) {
 
         return this._api('reactions.add', params);
     }
+
+    CrBot.prototype._isFromSelf = function(message) {
+        return message.user === this.user.id;
+    };
 };
 
 util.inherits(CrBot, Bot);
