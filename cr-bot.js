@@ -245,7 +245,7 @@ var CrBot = function Constructor(settings) {
 
     CrBot.prototype._buildStatsTable = function(commits, reviews) {
         var table = {};
-console.log(commits, reviews);
+
         commits.forEach(function(commit) {
             var row = {};
             row.id = commit.id;
