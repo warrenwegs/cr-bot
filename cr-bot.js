@@ -137,7 +137,7 @@ var CrBot = function Constructor(settings) {
 
     CrBot.prototype._parseGitHistoryMessage = function(message) {
         var commits = [];
-        var pattern = new RegExp('git.kiwicollection.net\/kiwicollection\/([\\w-]*)\/(?:commit|blob)\/(\\w{40})');
+        var pattern = new RegExp('git.kiwicollection.net\/\\w*\/([\\w-]*)\/(?:commit|blob)\/(\\w{40})');
 
         message.attachements.forEach(function(attachement) {
             var commit = {};
