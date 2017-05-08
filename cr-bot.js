@@ -331,7 +331,7 @@ var CrBot = function Constructor(settings) {
     }
 
     CrBot.prototype._parseCodeReviewCommits = function(message) {
-        var pattern = new RegExp('git\.kiwicollection\.net\/kiwicollection\/([\\w-]*)\/(?:commit|blob|merge_requests)\/(\\w{40}|\\d+)');
+        var pattern = new RegExp('git\.kiwicollection\.net\/\\w*\/([\\w-]*)\/(?:commit|blob|merge_requests)\/(\\w{40}|\\d+)');
 
         var commits = [];
 
