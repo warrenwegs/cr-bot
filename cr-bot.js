@@ -23,14 +23,14 @@ var CrBot = function Constructor(settings) {
 
         this.on('start', this._onStart);
         this.on('message', this._onMessage);
-    }
+    };
 
     CrBot.prototype._onStart = function() {
         this._loadBotUser();
         this._connectDb();
         this._firstRunCheck();
         // this._welcomeMessage();
-    }
+    };
 
     CrBot.prototype._loadBotUser = function() {
         var self = this;
@@ -46,7 +46,7 @@ var CrBot = function Constructor(settings) {
         }
 
         this.db = new SQLite.Database(this.dbPath);
-    }
+    };
 
     CrBot.prototype._createDb = function() {
         this.db = new SQLite.Database(this.dbPath, createTables.bind(this));
@@ -59,7 +59,7 @@ var CrBot = function Constructor(settings) {
             this.db.run("CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY ASC, commit_hash TEXT, datestamp INTEGER, intervalstamp INTEGER, user_id INTEGER, commented INTEGER, type TEXT, FOREIGN KEY(user_id) REFERENCES users(id), FOREIGN KEY(commit_hash) REFERENCES commits(hash))");
             console.log('Success');
         }
-    }
+    };
 
     CrBot.prototype._firstRunCheck = function() {
     };
@@ -85,7 +85,7 @@ var CrBot = function Constructor(settings) {
                 this._handleReactionRemoved(message);
             }
         }
-    }
+    };
 
     CrBot.prototype._handleReactionAdded = function(message) {
         var self = this;
@@ -99,7 +99,7 @@ var CrBot = function Constructor(settings) {
                 }
             })
         }
-    }
+    };
 
     CrBot.prototype._handleReactionRemoved = function(message) {
         var stamps = this._getDateStamps(message.item.ts);
@@ -110,7 +110,7 @@ var CrBot = function Constructor(settings) {
                 return console.error('DATABASE ERROR:', err);
             }
         })
-    }
+    };
 
     CrBot.prototype._saveReviewed = function(message, commit, userId) {
         var commented = this.iCommentedReaction.includes(message.reaction);
@@ -129,11 +129,11 @@ var CrBot = function Constructor(settings) {
                 return console.error('DATABASE ERROR:', err);
             }
         });
-    }
+    };
 
     CrBot.prototype._handleGitHistoryPosting = function(message) {
         var commits = this._parseGitHistoryMessage(message);
-    }
+    };
 
     CrBot.prototype._parseGitHistoryMessage = function(message) {
         var commits = [];
@@ -144,7 +144,7 @@ var CrBot = function Constructor(settings) {
 
             // attachement.fallback; // I think this was a fallback url?
         });
-    }
+    };
 
     CrBot.prototype._handleCodeReviewPosting = function(message) {
         var self = this;
@@ -156,7 +156,7 @@ var CrBot = function Constructor(settings) {
             });
             self._addBotReaction(message);
         }
-    }
+    };
 
     CrBot.prototype._handleCommand = function(message) {
         var self = this;
@@ -171,9 +171,8 @@ var CrBot = function Constructor(settings) {
             this._commandResponse(command, function(response) {
                 self.postMessage(message.channel, response);
             });
-        } 
-
-    }
+        }
+    };
 
     CrBot.prototype._commandResponse = function(command, postResponse) {
         switch(command.name) {
@@ -186,8 +185,8 @@ var CrBot = function Constructor(settings) {
             default:
                 return 'Error parsing command: "' + command.name + '" Do cr-bot:help for a list of commands';
                 break;
-        };
-    }
+        }
+    };
 
     CrBot.prototype._helpMessage = function() {
         return "cr-bot commands: \r\
@@ -195,7 +194,7 @@ var CrBot = function Constructor(settings) {
         stats - returns the current months code reviews leaderboard \r\
         stats overall - returns the total code reviews leaderboard \r\
         stats month -  eg jan; returns the code reviews leaderboard for that month";
-    }
+    };
 
     CrBot.prototype._statsMessage = function(arg, postResponse) {
         if ('overall' == arg) {
@@ -213,7 +212,7 @@ var CrBot = function Constructor(settings) {
                 postResponse("```This Months Leaders\n" + response + "```");
             });
         }
-    }
+    };
 
     CrBot.prototype._getOverallStats = function(postResponse) {
         var self = this;
@@ -225,7 +224,7 @@ var CrBot = function Constructor(settings) {
                 postResponse(self._buildStatsTable(commits, reviews));
             })
         });
-    }
+    };
 
     CrBot.prototype._getMonthStats = function(monthInt, postResponse) {
         var self = this;
@@ -241,7 +240,7 @@ var CrBot = function Constructor(settings) {
                 postResponse(self._buildStatsTable(commits, reviews));
             })
         });
-    }
+    };
 
     CrBot.prototype._buildStatsTable = function(commits, reviews) {
         var table = {};
@@ -287,7 +286,7 @@ var CrBot = function Constructor(settings) {
         })
 
         return this._formatLeaderboard(statsTable);
-    }
+    };
 
     CrBot.prototype._formatLeaderboard = function(statsTable) {
         var formattedRows = [['Rank', 'Name', 'Commits', 'Looked', 'Commented', 'Total']];
@@ -318,7 +317,7 @@ var CrBot = function Constructor(settings) {
         })
 
         return formattedRows.join("\n");
-    }
+    };
 
 
     CrBot.prototype._getDateStamps = function(date) {
@@ -328,7 +327,7 @@ var CrBot = function Constructor(settings) {
         stamps.interval = items[1];
 
         return stamps;
-    }
+    };
 
     CrBot.prototype._parseCodeReviewCommits = function(message) {
         var pattern = new RegExp('git\.kiwicollection\.net\/\\w*\/([\\w-]*)\/(?:commit|blob|merge_requests)\/(\\w{40}|\\d+)');
@@ -352,7 +351,7 @@ var CrBot = function Constructor(settings) {
         });
 
         return commits;
-    }
+    };
 
     CrBot.prototype._saveCommits = function(commits, userId) {
         var self = this;
@@ -369,7 +368,7 @@ var CrBot = function Constructor(settings) {
                 } 
             });
         });
-    }
+    };
 
     CrBot.prototype._getUserByUId = function(uid, callback) {
         var self = this;
@@ -396,7 +395,7 @@ var CrBot = function Constructor(settings) {
                 callback(user);
             }
         });
-    }
+    };
 
     CrBot.prototype._getCommitByStamps = function(stamps, callback) {
         var self = this;
@@ -412,7 +411,7 @@ var CrBot = function Constructor(settings) {
                 callback(false);
             }
         });
-    }
+    };
 
 
     CrBot.prototype._handleNewBuildDunce = function(message) {
@@ -425,7 +424,7 @@ var CrBot = function Constructor(settings) {
             var dunceMessage = "The new Build Watcher is " + currentDunce;
             this.postMessageToChannel('test-channel', dunceMessage, {as_user: true});
         }
-    }
+    };
 
 
     CrBot.prototype._isChannelConversation = function(message) {
@@ -481,7 +480,7 @@ var CrBot = function Constructor(settings) {
         };
 
         return this._api('reactions.add', params);
-    }
+    };
 
     CrBot.prototype._isFromSelf = function(message) {
         return message.user === this.user.id;
